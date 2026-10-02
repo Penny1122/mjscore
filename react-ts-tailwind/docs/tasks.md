@@ -132,7 +132,7 @@
 
 ## 10. 部署
 
-- [ ] 10.1 選擇平台（Vercel / Netlify / Cloudflare Pages）
+- [x] 10.1 選擇平台：Vercel（Root Directory 設為 `react-ts-tailwind`）
 - [ ] 10.2 設定環境變數並部署
 - [ ] 10.3 手機實機測試
 
@@ -167,7 +167,7 @@
 
 - [x] 13.1 移除更改密碼畫面與「設定」分頁；鎖定改到標題列「已解鎖」按鈕（需確認）
 - [x] 13.2 場地改為必填：前端驗證、資料庫 `0003_venue_required.sql`（已在 PGlite 驗證：舊的無場地紀錄保留，編輯時需補上）
-- [ ] 13.3 在 Supabase SQL Editor 執行 `0003_venue_required.sql`（需要你處理）
+- [x] 13.3 在 Supabase SQL Editor 執行 `0003_venue_required.sql`
 
 ## 14. 牌咖個人頁
 
@@ -191,7 +191,7 @@
 - [x] 15.1 migration `0004_rename_player.sql`：`rename_player` 更新所有紀錄與名單；新名字已存在時合併，同一筆有兩人時回傳 `name_conflict`
 - [x] 15.2 「名單」頁牌咖列「改名」按鈕與對話框，合併時提示
 - [x] 15.3 migration 在 PGlite 模擬環境驗證（改名、合併、衝突、錯密碼、空名字）
-- [ ] 15.4 在 Supabase SQL Editor 執行 `0004_rename_player.sql`
+- [x] 15.4 在 Supabase SQL Editor 執行 `0004_rename_player.sql`
 - [x] 15.5 瀏覽器測試（改名、合併、衝突）
 
 ## 16. 底色主題
