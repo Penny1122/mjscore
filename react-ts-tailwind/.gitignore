@@ -26,3 +26,6 @@ dist-ssr
 # Playwright
 test-results
 playwright-report
+
+# 本機匯入用的戰績原始資料，含個人輸贏，不上傳
+/data/

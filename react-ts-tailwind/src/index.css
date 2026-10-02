@@ -4,6 +4,135 @@ html {
   color-scheme: dark;
   background-color: #0b1120;
   -webkit-tap-highlight-color: transparent;
+
+  /* 圖表顏色（Charts.tsx） */
+  --chart-gain: #4ade80;
+  --chart-loss: #f87171;
+  --chart-accent: #22d3ee;
+  --chart-grid: #334155;
+  --chart-cursor: #94a3b8;
+
+  /* 名次徽章（RankedList.tsx），所有主題共用；值同 Tailwind 的 amber-400、slate-300、slate-950、orange-700、orange-50 */
+  --medal-gold: oklch(82.8% 0.189 84.429);
+  --medal-silver: oklch(86.9% 0.022 252.894);
+  --medal-ink: oklch(12.9% 0.042 264.695);
+  --medal-bronze: oklch(55.3% 0.195 38.402);
+  --medal-bronze-ink: oklch(98% 0.016 73.684);
+}
+
+/*
+ * 淺色主題：元件沿用深色版的 class，這裡把顏色變數換成淺色對應值。
+ * slate 整組反轉（950 底色 → 最淺、100 文字 → 最深）；
+ * 彩色的 200～400 原本是深底上的亮字，換成同色系的深色，在淺底上才看得清楚。
+ * 寫在 @layer 外面，才能蓋過 Tailwind 在 :root 定義的變數。
+ */
+
+/* 所有淺色主題共用：正負分、警示、稱號標籤 */
+html[data-theme='sky'],
+html[data-theme='lavender'],
+html[data-theme='mint'] {
+  color-scheme: light;
+
+  --color-emerald-200: #14532d;
+  --color-emerald-400: #15803d;
+  --color-rose-200: #881337;
+  --color-rose-300: #9f1239;
+  --color-rose-400: #be123c;
+  --color-rose-500: #e11d48;
+  --color-amber-200: #78350f;
+  --color-amber-300: #92400e;
+  --color-amber-400: #b45309;
+  --color-amber-500: #d97706;
+  --color-violet-200: #5b21b6;
+  --color-violet-400: #7c3aed;
+  --color-teal-200: #115e59;
+  --color-teal-400: #0d9488;
+  --color-sky-300: #0369a1;
+  --color-orange-300: #c2410c;
+
+  --chart-gain: #16a34a;
+  --chart-loss: #dc2626;
+}
+
+/* 各主題：底色、文字層級（slate）、強調色（cyan，按鈕底色夠深，上面的淺色字才清楚） */
+html[data-theme='sky'] {
+  background-color: #e8f2fb;
+
+  --color-slate-50: #0a1a2b;
+  --color-slate-100: #10263d;
+  --color-slate-200: #1c3550;
+  --color-slate-300: #2d4864;
+  --color-slate-400: #46617d;
+  --color-slate-500: #5a738d;
+  --color-slate-600: #7d93ab;
+  --color-slate-700: #bdd3e8;
+  --color-slate-800: #d5e4f2;
+  --color-slate-900: #ffffff;
+  --color-slate-950: #e8f2fb;
+
+  --color-cyan-100: #0c3d66;
+  --color-cyan-200: #0f4c81;
+  --color-cyan-300: #1562a5;
+  --color-cyan-400: #1a6fbd;
+  --color-cyan-500: #2f86d6;
+
+  --chart-accent: #1a6fbd;
+  --chart-grid: #bdd3e8;
+  --chart-cursor: #7d93ab;
+}
+
+/* 薰衣草：底色 #E3C8FF */
+html[data-theme='lavender'] {
+  background-color: #e3c8ff;
+
+  --color-slate-50: #170c25;
+  --color-slate-100: #241536;
+  --color-slate-200: #33224a;
+  --color-slate-300: #45305f;
+  --color-slate-400: #563d75;
+  --color-slate-500: #654a86;
+  --color-slate-600: #8a6daa;
+  --color-slate-700: #caa9ee;
+  --color-slate-800: #e2cdf8;
+  --color-slate-900: #fbf7ff;
+  --color-slate-950: #e3c8ff;
+
+  --color-cyan-100: #3b0764;
+  --color-cyan-200: #4c1d95;
+  --color-cyan-300: #5b21b6;
+  --color-cyan-400: #6d28d9;
+  --color-cyan-500: #8b5cf6;
+
+  --chart-accent: #6d28d9;
+  --chart-grid: #caa9ee;
+  --chart-cursor: #8a6daa;
+}
+
+/* 薄荷：底色 #D0EAEA */
+html[data-theme='mint'] {
+  background-color: #d0eaea;
+
+  --color-slate-50: #06201f;
+  --color-slate-100: #0c2b2a;
+  --color-slate-200: #173b3a;
+  --color-slate-300: #244e4c;
+  --color-slate-400: #33605d;
+  --color-slate-500: #45706d;
+  --color-slate-600: #6c8f8c;
+  --color-slate-700: #a6cdcb;
+  --color-slate-800: #c2e0de;
+  --color-slate-900: #f7fcfc;
+  --color-slate-950: #d0eaea;
+
+  --color-cyan-100: #053b38;
+  --color-cyan-200: #0a4e49;
+  --color-cyan-300: #0b5f59;
+  --color-cyan-400: #0d6b64;
+  --color-cyan-500: #14a098;
+
+  --chart-accent: #0d6b64;
+  --chart-grid: #a6cdcb;
+  --chart-cursor: #6c8f8c;
 }
 
 body {

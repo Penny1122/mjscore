@@ -171,6 +171,34 @@ export class FakeSupabase {
         this.players = this.players.filter((p) => p.name !== a.p_name)
         return { ok: true }
 
+      case 'rename_player': {
+        const from = String(a.p_old_name ?? '').trim()
+        const to = String(a.p_new_name ?? '').trim()
+        if (!from || !to || to.length > 30) return { error: 'invalid_name' }
+        if (from === to) return { ok: true, merged: false, records: 0 }
+        const conflict = this.records.some(
+          (r) =>
+            r.record_players.some((p) => p.name === from) &&
+            r.record_players.some((p) => p.name === to),
+        )
+        if (conflict) return { error: 'name_conflict' }
+        let count = 0
+        for (const r of this.records)
+          for (const p of r.record_players)
+            if (p.name === from) {
+              p.name = to
+              count++
+            }
+        const old = this.players.find((p) => p.name === from)
+        const target = this.players.find((p) => p.name === to)
+        if (target && old) {
+          if (old.last_used && (!target.last_used || old.last_used > target.last_used))
+            target.last_used = old.last_used
+          this.players = this.players.filter((p) => p !== old)
+        } else if (old) old.name = to
+        return { ok: true, merged: Boolean(target), records: count }
+      }
+
       case 'change_edit_password':
         if (String(a.p_new_password).length < 8) return { error: 'password_too_short' }
         this.password = String(a.p_new_password)

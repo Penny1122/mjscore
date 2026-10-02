@@ -10,7 +10,7 @@ const row = (id: string, name: string, score: string, rounds = '1'): PlayerDraft
 
 const draft = (players: PlayerDraft[], houseFee = '', houseFeeInTotal = false): RecordDraft => ({
   date: '2026-10-01',
-  venue: '',
+  venue: '樹窩',
   players,
   houseFee,
   houseFeeInTotal,
@@ -120,9 +120,12 @@ describe('validateDraft', () => {
     expect(validateDraft(draft(valid(), '-1')).houseFeeError).toBeDefined()
   })
 
-  it('場地去空白，空白為未指定', () => {
+  it('場地必填，前後空白會去掉', () => {
     expect(validateDraft({ ...draft(valid()), venue: '  阿明家 ' }).input?.venue).toBe('阿明家')
-    expect(validateDraft({ ...draft(valid()), venue: '   ' }).input?.venue).toBeUndefined()
+    const blank = validateDraft({ ...draft(valid()), venue: '   ' })
+    expect(blank.venueError).toBe('請選擇場地')
+    expect(blank.messages).toContain('請選擇場地')
+    expect(blank.input).toBeUndefined()
   })
 
   it('場地與名字長度上限 30 字', () => {

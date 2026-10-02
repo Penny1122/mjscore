@@ -1,10 +1,11 @@
 import type { RankedPlayerResult } from '../types'
 import { amountColorClass, formatAmount } from '../lib/format'
 
+/** 金銀銅不隨底色主題變，顏色定義在 index.css 的 --medal-* */
 const RANK_BADGE: Record<number, string> = {
-  1: 'bg-amber-400 text-slate-950',
-  2: 'bg-slate-300 text-slate-950',
-  3: 'bg-orange-700 text-orange-50',
+  1: 'bg-(--medal-gold) text-(--medal-ink)',
+  2: 'bg-(--medal-silver) text-(--medal-ink)',
+  3: 'bg-(--medal-bronze) text-(--medal-bronze-ink)',
 }
 
 export function RankBadge({ rank }: { rank: number }) {

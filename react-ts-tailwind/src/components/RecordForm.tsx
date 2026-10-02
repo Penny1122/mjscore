@@ -182,7 +182,7 @@ export function RecordForm({
 
       <div>
         <label htmlFor="record-venue" className="mb-1.5 block text-sm text-slate-400">
-          場地 <span className="text-slate-600">（選填）</span>
+          場地
         </label>
         <div className="relative">
           <input

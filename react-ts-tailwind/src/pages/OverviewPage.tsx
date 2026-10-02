@@ -1,12 +1,16 @@
 import type { GameRecord, KnownPlayer, Venue } from '../types'
-import { amountColorClass, formatAmount, formatDate } from '../lib/format'
+import { amountColorClass, formatAmount, formatDate, todayString } from '../lib/format'
 import { computeStandings, countBy, formatPercent, summarize } from '../lib/stats'
+import { computeProfile, MIN_TOGETHER } from '../lib/profile'
 import { RankBadge } from '../components/RankedList'
+import { computeTitles, TITLE_RULES } from '../lib/titles'
+import { RivalLabels, StreakLabel, TitleLabels } from '../components/Badges'
 
 type OverviewPageProps = {
   records: GameRecord[]
   players: KnownPlayer[]
   venues: Venue[]
+  onOpenPlayer: (name: string) => void
 }
 
 const cardClass = 'rounded-2xl border border-slate-800 bg-slate-900 p-4'
@@ -26,12 +30,15 @@ function Labels({
   counts,
   unit,
   empty,
+  onOpen,
 }: {
   title: string
   items: { name: string }[]
   counts: Map<string, number>
   unit: string
   empty: string
+  /** 有傳就可以點標籤 */
+  onOpen?: (name: string) => void
 }) {
   return (
     <section className={cardClass} aria-labelledby={`labels-${title}`}>
@@ -45,11 +52,10 @@ function Labels({
         <ul className="flex flex-wrap gap-2" aria-label={`${title}標籤`}>
           {items.map((item) => {
             const count = counts.get(item.name) ?? 0
-            return (
-              <li
-                key={item.name}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800/60 pr-1 pl-3 text-sm text-slate-200"
-              >
+            const pillClass =
+              'inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800/60 pr-1 pl-3 text-sm text-slate-200'
+            const inner = (
+              <>
                 {item.name}
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${
@@ -58,6 +64,22 @@ function Labels({
                 >
                   {count} {unit}
                 </span>
+              </>
+            )
+            // 沒上過桌的牌咖沒有個人數據可看
+            return (
+              <li key={item.name} className="flex">
+                {onOpen && count > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpen(item.name)}
+                    className={`${pillClass} active:bg-slate-700`}
+                  >
+                    {inner}
+                  </button>
+                ) : (
+                  <span className={pillClass}>{inner}</span>
+                )}
               </li>
             )
           })}
@@ -67,8 +89,15 @@ function Labels({
   )
 }
 
-export function OverviewPage({ records, players, venues }: OverviewPageProps) {
+export function OverviewPage({ records, players, venues, onOpenPlayer }: OverviewPageProps) {
   const standings = computeStandings(records)
+  const titles = computeTitles(records, standings, todayString())
+  const rivals = new Map(
+    standings.map((s) => {
+      const p = computeProfile(records, s.name)
+      return [s.name, { nemesis: p.nemesis, atm: p.atm }]
+    }),
+  )
   const summary = summarize(records)
   const playerCounts = countBy(records, (r) => r.players.map((p) => p.name))
   const venueCounts = countBy(records, (r) => (r.venue ? [r.venue] : []))
@@ -94,44 +123,76 @@ export function OverviewPage({ records, players, venues }: OverviewPageProps) {
           <>
             <ol className="divide-y divide-slate-800" aria-label="戰績排行">
               {standings.map((s) => (
-                <li key={s.name} className="flex items-center gap-3 py-3" data-testid="standing">
-                  <RankBadge rank={s.rank} />
+                <li key={s.name} className="flex items-start gap-3 py-3" data-testid="standing">
+                  <span className="pt-0.5">
+                    <RankBadge rank={s.rank} />
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-slate-100">{s.name}</span>
-                      <span
-                        className={`shrink-0 text-lg font-semibold tabular-nums ${amountColorClass(s.totalScore)}`}
-                      >
-                        {formatAmount(s.totalScore)}
+                    <button
+                      type="button"
+                      onClick={() => onOpenPlayer(s.name)}
+                      aria-label={`查看 ${s.name} 的個人數據`}
+                      className="-mx-2 -my-1 block w-[calc(100%+1rem)] rounded-lg px-2 py-1 text-left active:bg-slate-800"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate text-slate-100">{s.name}</span>
+                          <StreakLabel streak={s.streak} />
+                        </span>
+                        <span
+                          className={`shrink-0 text-lg font-semibold tabular-nums ${amountColorClass(s.totalScore)}`}
+                        >
+                          {formatAmount(s.totalScore)}
+                        </span>
                       </span>
-                    </div>
-                    <dl className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 tabular-nums">
-                      <div className="flex gap-1">
-                        <dt>場數</dt>
-                        <dd className="text-slate-300">{s.games}</dd>
-                      </div>
-                      <div className="flex gap-1">
-                        <dt>總將數</dt>
-                        <dd className="text-slate-300">{s.totalRounds}</dd>
-                      </div>
-                      <div className="flex gap-1">
-                        <dt>勝率</dt>
-                        <dd className="text-slate-300">
-                          {formatPercent(s.winRate)}（{s.wins}/{s.games}）
-                        </dd>
-                      </div>
-                      <div className="flex gap-1">
-                        <dt>每將</dt>
-                        <dd className={amountColorClass(s.perRound)}>{formatAmount(s.perRound)}</dd>
-                      </div>
-                    </dl>
+                      <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 tabular-nums">
+                        <span className="flex gap-1">
+                          <span>場數</span>
+                          <span className="text-slate-300">{s.games}</span>
+                        </span>
+                        <span className="flex gap-1">
+                          <span>總將數</span>
+                          <span className="text-slate-300">{s.totalRounds}</span>
+                        </span>
+                        <span className="flex gap-1">
+                          <span>勝率</span>
+                          <span className="text-slate-300">
+                            {formatPercent(s.winRate)}（{s.wins}/{s.games}）
+                          </span>
+                        </span>
+                        <span className="flex gap-1">
+                          <span>每將</span>
+                          <span className={amountColorClass(s.perRound)}>
+                            {formatAmount(s.perRound)}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+                    <RivalLabels {...rivals.get(s.name)} />
+                    <TitleLabels titles={titles.get(s.name) ?? []} />
                   </div>
                 </li>
               ))}
             </ol>
             <p className="mt-2 text-xs leading-5 text-slate-600">
-              總分為所有紀錄金額加總，不含東錢。勝率 = 贏錢場數 ÷ 出場場數（0 元不算贏）。
+              點名字看個人數據。總分為所有紀錄金額加總，不含東錢。勝率 = 贏錢場數 ÷ 出場場數（0
+              元不算贏）。連勝／連敗從最近一場往回數，打平會中斷。 剋星／提款機：同桌至少{' '}
+              {MIN_TOGETHER} 場，同一場金額比對方高算贏，淨勝場最差／最好的對手。
             </p>
+            <details className="group mt-2 text-xs text-slate-500">
+              <summary className="cursor-pointer list-none py-1 text-slate-400 select-none">
+                <span className="inline-block transition group-open:rotate-90">›</span> 稱號說明
+              </summary>
+              <dl className="mt-1 space-y-1">
+                {TITLE_RULES.map((r) => (
+                  <div key={r.id} className="flex gap-2">
+                    <dt className="w-28 shrink-0 text-slate-300">{r.name}</dt>
+                    <dd>{r.rule}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-2 text-slate-600">同分時大家都拿得到；所有人都一樣時不頒。</p>
+            </details>
           </>
         )}
       </section>
@@ -142,6 +203,7 @@ export function OverviewPage({ records, players, venues }: OverviewPageProps) {
         counts={playerCounts}
         unit="場"
         empty="還沒有牌咖"
+        onOpen={onOpenPlayer}
       />
       <Labels title="場地" items={venues} counts={venueCounts} unit="場" empty="還沒有場地" />
     </div>

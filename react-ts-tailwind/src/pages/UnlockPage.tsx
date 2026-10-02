@@ -68,7 +68,7 @@ export function UnlockPage({ notice, onUnlock }: UnlockPageProps) {
         {busy ? '確認中…' : '解鎖'}
       </button>
 
-      <p className="text-center text-xs text-slate-600">解鎖後這台裝置會記住，可在「設定」鎖定。</p>
+      <p className="text-center text-xs text-slate-600">解鎖後這台裝置會記住，點右上角「已解鎖」可以鎖定。</p>
     </form>
   )
 }

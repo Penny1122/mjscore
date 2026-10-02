@@ -1,4 +1,8 @@
 import type { GameRecord } from '../types'
+import { rankPlayers } from './ranking'
+
+/** 目前的連續狀態：從最近一場往回數。打平（0 元）會中斷 */
+export type Streak = { kind: 'win' | 'loss' | 'none'; count: number }
 
 /** 一位牌咖在所有紀錄中的戰績 */
 export type PlayerStanding = {
@@ -19,36 +23,93 @@ export type PlayerStanding = {
   winRate: number
   /** 每將平均（元），四捨五入到整數 */
   perRound: number
+  /** 目前幾連勝／幾連敗 */
+  streak: Streak
+  /** 打平（0 元）的場數 */
+  draws: number
+  /** 單場拿第一名的次數（同分並列第一也算） */
+  firstPlaces: number
+  /** 單場最高金額 */
+  bestGame: number
+  /** 單場最低金額 */
+  worstGame: number
+  /** 每場輸贏起伏：金額的標準差（元），四捨五入 */
+  volatility: number
+  /** 最後一次上桌的日期 YYYY-MM-DD */
+  lastDate: string
+}
+
+/** 舊到新：日期，同日期依建立時間 */
+export function chronological(records: GameRecord[]): GameRecord[] {
+  return [...records].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt),
+  )
+}
+
+type Accumulator = Omit<PlayerStanding, 'rank' | 'winRate' | 'perRound' | 'volatility'> & {
+  sumSquares: number
 }
 
 export function computeStandings(records: GameRecord[]): PlayerStanding[] {
-  const byName = new Map<string, Omit<PlayerStanding, 'rank' | 'winRate' | 'perRound'>>()
+  const byName = new Map<string, Accumulator>()
 
-  for (const record of records) {
+  // 依時間順序走過，連勝／連敗才算得對
+  for (const record of chronological(records)) {
+    const firstPlaceNames = new Set(
+      rankPlayers(record.players)
+        .filter((p) => p.rank === 1)
+        .map((p) => p.name),
+    )
+
     for (const p of record.players) {
-      const s = byName.get(p.name) ?? {
+      const s: Accumulator = byName.get(p.name) ?? {
         name: p.name,
         games: 0,
         totalScore: 0,
         totalRounds: 0,
         wins: 0,
         losses: 0,
+        streak: { kind: 'none', count: 0 },
+        draws: 0,
+        firstPlaces: 0,
+        bestGame: p.score,
+        worstGame: p.score,
+        lastDate: record.date,
+        sumSquares: 0,
       }
       s.games += 1
       s.totalScore += p.score
       s.totalRounds += p.rounds
+      s.sumSquares += p.score * p.score
       if (p.score > 0) s.wins += 1
       if (p.score < 0) s.losses += 1
+      if (p.score === 0) s.draws += 1
+      if (firstPlaceNames.has(p.name)) s.firstPlaces += 1
+      s.bestGame = Math.max(s.bestGame, p.score)
+      s.worstGame = Math.min(s.worstGame, p.score)
+      s.lastDate = record.date
+
+      const kind = p.score > 0 ? 'win' : p.score < 0 ? 'loss' : 'none'
+      s.streak =
+        kind === 'none'
+          ? { kind, count: 0 }
+          : { kind, count: s.streak.kind === kind ? s.streak.count + 1 : 1 }
+
       byName.set(p.name, s)
     }
   }
 
   const sorted = [...byName.values()]
-    .map((s) => ({
-      ...s,
-      winRate: s.games ? s.wins / s.games : 0,
-      perRound: s.totalRounds ? Math.round(s.totalScore / s.totalRounds) : 0,
-    }))
+    .map(({ sumSquares, ...s }) => {
+      const mean = s.totalScore / s.games
+      return {
+        ...s,
+        winRate: s.wins / s.games,
+        perRound: s.totalRounds ? Math.round(s.totalScore / s.totalRounds) : 0,
+        // 母體標準差；浮點誤差可能讓變異數略小於 0
+        volatility: Math.round(Math.sqrt(Math.max(0, sumSquares / s.games - mean * mean))),
+      }
+    })
     // 總分高到低；同分時勝率高的在前，再依名字排，讓順序固定
     .sort(
       (a, b) =>

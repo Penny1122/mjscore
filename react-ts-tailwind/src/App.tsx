@@ -7,21 +7,23 @@ import { RecordForm } from './components/RecordForm'
 import { HistoryPage } from './pages/HistoryPage'
 import { DetailPage } from './pages/DetailPage'
 import { RosterPage } from './pages/RosterPage'
+import { ThemePicker } from './components/ThemePicker'
 import { UnlockPage } from './pages/UnlockPage'
-import { SettingsPage } from './pages/SettingsPage'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { OverviewPage } from './pages/OverviewPage'
+import { PlayerPage } from './pages/PlayerPage'
 
 type View =
   | { name: 'overview' }
   | { name: 'new' }
   | { name: 'history' }
   | { name: 'roster' }
-  | { name: 'settings' }
   | { name: 'unlock' }
   | { name: 'detail'; id: string }
   | { name: 'edit'; id: string }
+  | { name: 'player'; player: string }
 
-type Tab = 'overview' | 'new' | 'history' | 'roster' | 'settings' | 'unlock'
+type Tab = 'overview' | 'new' | 'history' | 'roster' | 'unlock'
 
 /** 導覽列圖示（24×24 線條圖，跟著文字顏色） */
 const ICON_PATHS: Record<Tab, string> = {
@@ -30,7 +32,6 @@ const ICON_PATHS: Record<Tab, string> = {
   history: 'M4 6h16M4 12h16M4 18h10',
   roster:
     'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M22 19v-1a4 4 0 0 0-3-3.87M16 4.13a3 3 0 0 1 0 5.74',
-  settings: 'M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4',
   unlock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z',
 }
 
@@ -39,7 +40,6 @@ const EDIT_TABS: { tab: Tab; label: string }[] = [
   { tab: 'new', label: '新增紀錄' },
   { tab: 'history', label: '歷史紀錄' },
   { tab: 'roster', label: '名單' },
-  { tab: 'settings', label: '設定' },
 ]
 
 const READ_ONLY_TABS: { tab: Tab; label: string }[] = [
@@ -54,17 +54,28 @@ const TITLES: Record<View['name'], string> = {
   new: '新增紀錄',
   history: '歷史紀錄',
   roster: '牌咖與場地',
-  settings: '設定',
   unlock: '解鎖編輯',
   detail: '紀錄明細',
   edit: '編輯紀錄',
+  player: '牌咖',
 }
 
 /** 需要解鎖才能進入的頁面 */
-const EDIT_ONLY = new Set<View['name']>(['new', 'edit', 'settings'])
+const EDIT_ONLY = new Set<View['name']>(['new', 'edit'])
 
-function activeTab(view: View): Tab {
-  return view.name === 'detail' || view.name === 'edit' ? 'history' : view.name
+/** 底部導覽亮哪一個：看這一串頁面是從哪個分頁開始的 */
+function activeTab(root: View): Tab {
+  if (root.name === 'detail' || root.name === 'edit') return 'history'
+  if (root.name === 'player') return 'overview'
+  return root.name
+}
+
+/** 沒有上一頁可回時，返回鍵要去的地方 */
+function fallbackBack(view: View): View | undefined {
+  if (view.name === 'detail') return { name: 'history' }
+  if (view.name === 'edit') return { name: 'detail', id: view.id }
+  if (view.name === 'player') return { name: 'overview' }
+  return undefined
 }
 
 function Centered({ children }: { children: ReactNode }) {
@@ -88,7 +99,9 @@ export default function App() {
 function ConnectedApp({ api }: { api: Api }) {
   const [password, setPassword] = useState<string | null>(loadEditPassword)
   // 一進來先看總覽
-  const [view, setView] = useState<View>({ name: 'overview' })
+  // 頁面堆疊：最後一個是目前頁面；點進去用 push，返回用 pop，切換分頁就重設
+  const [stack, setStack] = useState<View[]>([{ name: 'overview' }])
+  const view = stack[stack.length - 1]
   const [records, setRecords] = useState<GameRecord[]>([])
   const [knownPlayers, setKnownPlayers] = useState<KnownPlayer[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
@@ -96,6 +109,7 @@ function ConnectedApp({ api }: { api: Api }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [unlockNotice, setUnlockNotice] = useState<string | null>(null)
+  const [confirmingLock, setConfirmingLock] = useState(false)
   const loadedOnce = useRef(false)
 
   const canEdit = password !== null
@@ -145,10 +159,22 @@ function ConnectedApp({ api }: { api: Api }) {
     })
   }, [api, lock])
 
-  const go = (next: View) => {
+  const navigate = (next: View[]) => {
     setError(null)
-    setView(next)
+    setStack(next)
     window.scrollTo({ top: 0 })
+  }
+  /** 切換到某一頁（清掉返回紀錄） */
+  const go = (next: View) => navigate([next])
+  /** 點進下一層 */
+  const push = (next: View) => navigate([...stack, next])
+  /** 回上一頁 */
+  const pop = () => {
+    if (stack.length > 1) navigate(stack.slice(0, -1))
+    else {
+      const fallback = fallbackBack(view)
+      if (fallback) go(fallback)
+    }
   }
 
   /** 執行寫入，完成後重新載入。密碼失效時回到唯讀 */
@@ -162,7 +188,7 @@ function ConnectedApp({ api }: { api: Api }) {
     } catch (e) {
       if (isPasswordError(e)) {
         lock('編輯密碼已變更，請重新解鎖。')
-        setView({ name: 'unlock' })
+        go({ name: 'unlock' })
       } else {
         setError(toApiError(e).message)
         window.scrollTo({ top: 0 })
@@ -190,36 +216,21 @@ function ConnectedApp({ api }: { api: Api }) {
   const handleCreate = async (input: GameRecordInput) => {
     let id = ''
     if (await runWrite(async (pw) => void (id = await api.saveRecord(pw, null, input)))) {
-      go({ name: 'detail', id })
+      // 存檔後看明細，返回到歷史紀錄
+      navigate([{ name: 'history' }, { name: 'detail', id }])
     }
   }
 
   const handleUpdate = async (id: string, input: GameRecordInput) => {
-    if (await runWrite((pw) => api.saveRecord(pw, id, input).then(() => undefined))) {
-      go({ name: 'detail', id })
-    }
+    if (await runWrite((pw) => api.saveRecord(pw, id, input).then(() => undefined))) pop()
   }
 
   const handleDelete = async (id: string) => {
-    if (await runWrite((pw) => api.deleteRecord(pw, id))) go({ name: 'history' })
-  }
-
-  const handleChangePassword = async (next: string): Promise<string | null> => {
-    let message: string | null = null
-    const ok = await runWrite(async (pw) => {
-      try {
-        await api.changePassword(pw, next)
-      } catch (e) {
-        // 密碼失效交給 runWrite 處理；其他錯誤顯示在表單上
-        if (isPasswordError(e)) throw e
-        message = toApiError(e).message
-      }
-    })
-    if (ok && !message) {
-      saveEditPassword(next)
-      setPassword(next)
+    // 刪除後回到上一頁（歷史紀錄或牌咖頁）；直接打開明細時回歷史紀錄
+    if (await runWrite((pw) => api.deleteRecord(pw, id))) {
+      if (stack.length > 1) pop()
+      else go({ name: 'history' })
     }
-    return ok ? message : '更改失敗'
   }
 
   // 唯讀時進到需要解鎖的頁面，改顯示解鎖畫面
@@ -229,12 +240,7 @@ function ConnectedApp({ api }: { api: Api }) {
       ? records.find((r) => r.id === shown.id)
       : undefined
 
-  const back =
-    shown.name === 'detail'
-      ? () => go({ name: 'history' })
-      : shown.name === 'edit'
-        ? () => go({ name: 'detail', id: shown.id })
-        : undefined
+  const back = shown === view && (stack.length > 1 || fallbackBack(view)) ? pop : undefined
 
   let content
   if (status === 'loading') {
@@ -272,14 +278,32 @@ function ConnectedApp({ api }: { api: Api }) {
         )
         break
       case 'overview':
-        content = <OverviewPage records={records} players={knownPlayers} venues={venues} />
+        content = (
+          <OverviewPage
+            records={records}
+            players={knownPlayers}
+            venues={venues}
+            onOpenPlayer={(player) => push({ name: 'player', player })}
+          />
+        )
+        break
+      case 'player':
+        content = (
+          <PlayerPage
+            key={shown.player}
+            records={records}
+            name={shown.player}
+            onOpenRecord={(id) => push({ name: 'detail', id })}
+            onOpenPlayer={(player) => push({ name: 'player', player })}
+          />
+        )
         break
       case 'history':
         content = (
           <HistoryPage
             records={records}
             canEdit={canEdit}
-            onOpen={(id) => go({ name: 'detail', id })}
+            onOpen={(id) => push({ name: 'detail', id })}
             onCreate={() => go({ name: 'new' })}
           />
         )
@@ -287,6 +311,7 @@ function ConnectedApp({ api }: { api: Api }) {
       case 'roster':
         content = (
           <RosterPage
+            onOpenPlayer={(player) => push({ name: 'player', player })}
             players={knownPlayers}
             venues={venues}
             canEdit={canEdit}
@@ -301,18 +326,9 @@ function ConnectedApp({ api }: { api: Api }) {
                 kind === 'players' ? api.forgetPlayer(pw, name) : api.forgetVenue(pw, name),
               )
             }
-          />
-        )
-        break
-      case 'settings':
-        content = (
-          <SettingsPage
-            busy={busy}
-            onLock={() => {
-              lock()
-              go({ name: 'overview' })
-            }}
-            onChangePassword={handleChangePassword}
+            onRenamePlayer={(oldName, newName) =>
+              runWrite((pw) => api.renamePlayer(pw, oldName, newName))
+            }
           />
         )
         break
@@ -322,7 +338,7 @@ function ConnectedApp({ api }: { api: Api }) {
             record={current}
             canEdit={canEdit}
             busy={busy}
-            onEdit={() => go({ name: 'edit', id: current.id })}
+            onEdit={() => push({ name: 'edit', id: current.id })}
             onDelete={() => void handleDelete(current.id)}
           />
         ) : (
@@ -339,7 +355,7 @@ function ConnectedApp({ api }: { api: Api }) {
             submitLabel="儲存修改"
             busy={busy}
             onSubmit={(input) => void handleUpdate(current.id, input)}
-            onCancel={() => go({ name: 'detail', id: current.id })}
+            onCancel={pop}
           />
         ) : (
           <Centered>找不到這筆紀錄</Centered>
@@ -348,7 +364,7 @@ function ConnectedApp({ api }: { api: Api }) {
     }
   }
 
-  const tab = activeTab(shown)
+  const tab = shown.name === 'unlock' ? 'unlock' : activeTab(stack[0])
   const tabs = canEdit ? EDIT_TABS : READ_ONLY_TABS
 
   return (
@@ -368,11 +384,14 @@ function ConnectedApp({ api }: { api: Api }) {
               ‹
             </button>
           )}
-          <h1 className="text-lg font-semibold">{TITLES[shown.name]}</h1>
+          <h1 className="truncate text-lg font-semibold">
+            {shown.name === 'player' ? shown.player : TITLES[shown.name]}
+          </h1>
           <div className="ml-auto flex items-center gap-2">
             {shown.name === 'history' && records.length > 0 && (
               <span className="text-sm text-slate-500">{records.length} 筆</span>
             )}
+            <ThemePicker />
             {!canEdit && shown.name !== 'unlock' && (
               <button
                 type="button"
@@ -380,6 +399,15 @@ function ConnectedApp({ api }: { api: Api }) {
                 className="rounded-full border border-slate-700 px-2.5 py-1 text-xs text-slate-400 active:bg-slate-800"
               >
                 唯讀
+              </button>
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setConfirmingLock(true)}
+                className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-200 active:bg-cyan-400/20"
+              >
+                已解鎖
               </button>
             )}
           </div>
@@ -435,6 +463,18 @@ function ConnectedApp({ api }: { api: Api }) {
           ))}
         </div>
       </nav>
+      <ConfirmDialog
+        open={confirmingLock}
+        title="鎖定這台裝置？"
+        message="鎖定後回到唯讀，要再編輯需重新輸入密碼。"
+        confirmLabel="鎖定"
+        onCancel={() => setConfirmingLock(false)}
+        onConfirm={() => {
+          setConfirmingLock(false)
+          lock()
+          go({ name: 'overview' })
+        }}
+      />
     </div>
   )
 }

@@ -19,8 +19,8 @@
 - 只有一組共用密碼，所有可編輯的人用同一組。
 - 解鎖後該裝置會記住，下次打開不用再輸入；按「鎖定」或密碼被更改後才需要重新輸入。
 - 唯讀時，畫面上不顯示新增、編輯、刪除按鈕，標題列顯示「唯讀」。
-- 底部導覽：唯讀為「歷史紀錄／常用玩家／解鎖」，解鎖後為「新增紀錄／歷史紀錄／常用玩家／設定」。
-- 「設定」頁可以鎖定此裝置、更改密碼。
+- 底部導覽：唯讀為「總覽／歷史紀錄／名單／解鎖」，解鎖後為「總覽／新增紀錄／歷史紀錄／名單」。
+- 解鎖後標題列顯示「已解鎖」，點了確認即可鎖定。畫面上不提供改密碼，改密碼用 `set-password.sql`（資料庫的 `change_edit_password` 函式保留但前端不再使用）。
 
 ### 為什麼密碼一定要在資料庫端檢查
 
@@ -153,6 +153,7 @@ anon 可以一直呼叫 `verify_edit_password` 試密碼。降低風險的做法
 | --- | --- |
 | `supabase/migrations/0001_init.sql` | 資料表、RLS、函式，在 SQL Editor 執行一次 |
 | `supabase/migrations/0002_venues_and_players.sql` | 場地名單、紀錄的場地欄位、手動新增牌咖 |
+| `supabase/migrations/0003_venue_required.sql` | `save_record` 要求必填場地 |
 | `supabase/set-password.sql` | 設定或重設編輯密碼 |
 | `src/lib/api.ts` | 前端呼叫 Supabase 的函式 |
 | `src/lib/supabase.ts` | 建立 Supabase client |

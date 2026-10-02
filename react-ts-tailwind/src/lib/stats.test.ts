@@ -86,6 +86,43 @@ describe('computeStandings', () => {
   it('沒有紀錄', () => expect(computeStandings([])).toEqual([]))
 })
 
+describe('連勝／連敗', () => {
+  // 故意打亂順序傳入，確認會依日期排
+  const r = (date: string, a: number) =>
+    record(date, [
+      ['A', a, 1],
+      ['B', -a, 1],
+      ['C', 0, 1],
+      ['D', 0, 1],
+    ])
+  const seq = [
+    r('2026-09-05', 100), // A 勝
+    r('2026-09-01', -100), // A 敗
+    r('2026-09-06', 100), // A 勝
+    r('2026-09-02', -100), // A 敗
+    r('2026-09-03', -100), // A 敗
+    r('2026-09-04', 100), // A 勝
+  ]
+  const by = (name: string, rs = seq) => computeStandings(rs).find((s) => s.name === name)!
+
+  it('目前連勝：從最近一場往回數', () => {
+    expect(by('A').streak).toEqual({ kind: 'win', count: 3 })
+    expect(by('B').streak).toEqual({ kind: 'loss', count: 3 })
+  })
+
+  it('打平中斷連續', () => {
+    const withDraw = [...seq, r('2026-09-07', 0)]
+    expect(by('A', withDraw).streak).toEqual({ kind: 'none', count: 0 })
+    expect(by('C').streak).toEqual({ kind: 'none', count: 0 })
+  })
+
+  it('同一天依建立時間排', () => {
+    const first = { ...r('2026-10-01', -100), createdAt: '2026-10-01T10:00:00Z' }
+    const second = { ...r('2026-10-01', 100), createdAt: '2026-10-01T12:00:00Z' }
+    expect(by('A', [second, first]).streak).toEqual({ kind: 'win', count: 1 })
+  })
+})
+
 describe('summarize', () => {
   it('場數、總將數（每筆取最高）、最近日期', () => {
     expect(summarize(records)).toEqual({ games: 3, totalRounds: 2 + 3 + 1, lastDate: '2026-10-01' })

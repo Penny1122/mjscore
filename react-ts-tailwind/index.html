@@ -6,6 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b1120" />
     <title>麻將記分</title>
+    <script>
+      // 在畫面出來前套用底色主題，避免閃一下深色；邏輯同 src/lib/theme.ts
+      try {
+        var colors = { sky: '#e8f2fb', lavender: '#e3c8ff', mint: '#d0eaea' }
+        var theme = localStorage.getItem('mjscore.theme')
+        if (colors[theme]) {
+          document.documentElement.dataset.theme = theme
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', colors[theme])
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

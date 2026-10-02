@@ -5,10 +5,10 @@ export type ApiErrorCode =
   | 'invalid_password'
   | 'too_many_attempts'
   | 'password_not_set'
-  | 'password_too_short'
   | 'invalid_record'
   | 'invalid_name'
   | 'record_not_found'
+  | 'name_conflict'
   | 'network'
   | 'unknown'
 
@@ -16,10 +16,10 @@ const MESSAGES: Record<ApiErrorCode, string> = {
   invalid_password: '密碼錯誤',
   too_many_attempts: '密碼錯誤次數太多，請 10 分鐘後再試',
   password_not_set: '尚未設定編輯密碼，請先在 Supabase 執行 set-password.sql',
-  password_too_short: '新密碼至少要 8 個字元',
   invalid_record: '資料不正確',
   invalid_name: '名稱需為 1 到 30 個字',
   record_not_found: '找不到這筆紀錄，可能已被刪除',
+  name_conflict: '有紀錄同時出現這兩個名字，不能合併',
   network: '無法連線，請檢查網路後再試',
   unknown: '發生錯誤，請稍後再試',
 }
@@ -189,19 +189,17 @@ export function createApi(client: SupabaseClient) {
       await rpc('forget_player', { p_password: password, p_name: name })
     },
 
+    /** 改名，所有紀錄一起更新；新名字已在名單中時合併兩人 */
+    async renamePlayer(password: string, oldName: string, newName: string): Promise<void> {
+      await rpc('rename_player', { p_password: password, p_old_name: oldName, p_new_name: newName })
+    },
+
     async addVenue(password: string, name: string): Promise<void> {
       await rpc('add_venue', { p_password: password, p_name: name })
     },
 
     async forgetVenue(password: string, name: string): Promise<void> {
       await rpc('forget_venue', { p_password: password, p_name: name })
-    },
-
-    async changePassword(oldPassword: string, newPassword: string): Promise<void> {
-      await rpc('change_edit_password', {
-        p_old_password: oldPassword,
-        p_new_password: newPassword,
-      })
     },
   }
 }

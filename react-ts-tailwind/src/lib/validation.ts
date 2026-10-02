@@ -14,7 +14,7 @@ export type PlayerDraft = {
 
 export type RecordDraft = {
   date: string
-  /** 場地，空字串代表不指定 */
+  /** 場地，必填 */
   venue: string
   players: PlayerDraft[]
   houseFee: string
@@ -71,7 +71,11 @@ export function validateDraft(draft: RecordDraft): DraftValidation {
   if (dateError) messages.push(dateError)
 
   const venue = draft.venue.trim()
-  const venueError = venue.length > NAME_MAX ? `場地名稱最多 ${NAME_MAX} 個字` : undefined
+  const venueError = !venue
+    ? '請選擇場地'
+    : venue.length > NAME_MAX
+      ? `場地名稱最多 ${NAME_MAX} 個字`
+      : undefined
   if (venueError) messages.push(venueError)
 
   const countError =
@@ -144,7 +148,7 @@ export function validateDraft(draft: RecordDraft): DraftValidation {
   if (messages.length === 0) {
     result.input = {
       date: draft.date,
-      venue: venue || undefined,
+      venue,
       players,
       houseFee,
       houseFeeInTotal: draft.houseFeeInTotal,

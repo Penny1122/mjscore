@@ -32,7 +32,14 @@ const FIVE: Row[] = [
   { name: '小陳', score: '200', rounds: '1' },
 ]
 
+/** 場地必填：還沒選場地時填一個 */
+async function ensureVenue(page: Page, venue = '樹窩') {
+  const input = page.locator('#record-venue')
+  if (!(await input.inputValue())) await input.fill(venue)
+}
+
 async function createFivePlayerRecord(page: Page) {
+  await ensureVenue(page)
   await page.getByRole('button', { name: '＋ 新增玩家' }).click()
   for (const [i, row] of FIVE.entries()) await fillRow(page, i, row)
   await page.locator('#house-fee').fill('400')
@@ -70,7 +77,31 @@ test.describe('唯讀與解鎖', () => {
     await page.getByLabel('編輯密碼').fill(TEST_PASSWORD)
     await page.locator('main form').getByRole('button', { name: '解鎖' }).click()
     await expect(page.getByRole('heading', { name: '新增紀錄' })).toBeVisible()
-    await expect(nav(page).getByRole('button', { name: '設定' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '已解鎖' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '唯讀' })).toHaveCount(0)
+  })
+
+  test('底色：唯讀也能換，重新整理後記住，換回深色', async ({ page }) => {
+    const html = page.locator('html')
+    await expect(html).not.toHaveAttribute('data-theme')
+
+    await page.getByRole('button', { name: '選擇底色' }).click()
+    await expect(page.getByRole('radio', { name: '深色' })).toHaveAttribute('aria-checked', 'true')
+    await page.getByRole('radio', { name: '淺藍' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(html).toHaveAttribute('data-theme', 'sky')
+    await expect(page.locator('body')).toHaveCSS('color-scheme', 'light')
+
+    await page.reload()
+    await expect(html).toHaveAttribute('data-theme', 'sky')
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#e8f2fb')
+
+    await page.getByRole('button', { name: '選擇底色' }).click()
+    await expect(page.getByRole('radio', { name: '淺藍' })).toHaveAttribute('aria-checked', 'true')
+    await page.getByRole('radio', { name: '深色' }).click()
+    await expect(html).not.toHaveAttribute('data-theme')
+    await page.reload()
+    await expect(html).not.toHaveAttribute('data-theme')
   })
 
   test('解鎖後重新整理仍記住', async ({ page }) => {
@@ -85,8 +116,8 @@ test.describe('唯讀與解鎖', () => {
   test('鎖定後恢復唯讀，明細與名單都不能改', async ({ page }) => {
     await unlock(page)
     await createAndOpen(page)
-    await nav(page).getByRole('button', { name: '設定' }).click()
-    await page.getByRole('button', { name: '鎖定此裝置' }).click()
+    await page.getByRole('button', { name: '已解鎖' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: '鎖定' }).click()
 
     await expect(page.getByRole('heading', { name: '總覽' })).toBeVisible()
     await nav(page).getByRole('button', { name: '歷史紀錄' }).click()
@@ -127,19 +158,14 @@ test.describe('唯讀與解鎖', () => {
     await expect(page.getByRole('status')).toContainText('密碼已變更')
   })
 
-  test('更改密碼', async ({ page, fake }) => {
+  test('鎖定前要確認，取消就維持解鎖', async ({ page }) => {
     await unlock(page)
-    await nav(page).getByRole('button', { name: '設定' }).click()
-    await page.getByLabel('新密碼').fill('brand-new-pass')
-    await page.getByLabel('再輸入一次').fill('brand-new-pass')
-    await page.getByRole('button', { name: '更改密碼' }).click()
-    await expect(page.getByRole('status')).toContainText('密碼已更改')
-    expect(fake.password).toBe('brand-new-pass')
-
-    // 本機已改用新密碼，仍可寫入
-    await nav(page).getByRole('button', { name: '新增紀錄' }).click()
-    await createAndOpen(page)
-    expect(fake.records).toHaveLength(1)
+    await page.getByRole('button', { name: '已解鎖' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: '取消' }).click()
+    await expect(page.getByRole('button', { name: '已解鎖' })).toBeVisible()
+    await expect(nav(page).getByRole('button', { name: '新增紀錄' })).toBeVisible()
+    // 已經沒有設定分頁
+    await expect(nav(page).getByRole('button', { name: '設定' })).toHaveCount(0)
   })
 })
 
@@ -189,6 +215,7 @@ test.describe('紀錄', () => {
   })
 
   test('東錢計入加總時，玩家金額 + 東錢 = 0 才能存', async ({ page, fake }) => {
+    await ensureVenue(page)
     await fillRow(page, 0, { name: 'A', score: '800', rounds: '3' })
     await fillRow(page, 1, { name: 'B', score: '-400', rounds: '3' })
     await fillRow(page, 2, { name: 'C', score: '-300', rounds: '3' })
@@ -348,7 +375,56 @@ test.describe('紀錄', () => {
     await expect(page.getByTestId('record-card')).toContainText('📍 麻將館')
   })
 
-  test('記錄時輸入新場地會自動加入名單；可清除場地', async ({ page, fake }) => {
+  test('名單：牌咖改名會更新紀錄，名字已存在時合併', async ({ page, fake }) => {
+    await createAndOpen(page)
+    await nav(page).getByRole('button', { name: '名單' }).click()
+
+    const dialog = page.getByRole('dialog')
+    await page.getByRole('button', { name: '幫 阿明 改名' }).click()
+    await expect(dialog.getByLabel('新名字')).toHaveValue('阿明')
+    await expect(dialog.getByRole('button', { name: '改名' })).toBeDisabled()
+    await dialog.getByLabel('新名字').fill(' 大明 ')
+    await dialog.getByRole('button', { name: '改名' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '幫 大明 改名' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '幫 阿明 改名' })).toHaveCount(0)
+    expect(fake.records[0].record_players.map((p) => p.name)).toContain('大明')
+
+    // 同一筆紀錄裡有這兩個人，不能合併
+    await page.getByRole('button', { name: '幫 小陳 改名' }).click()
+    await dialog.getByLabel('新名字').fill('老王')
+    await expect(dialog).toContainText('兩人的紀錄會合併')
+    await dialog.getByRole('button', { name: '合併' }).click()
+    await expect(page.getByRole('alert')).toContainText('不能合併')
+    expect(fake.records[0].record_players.map((p) => p.name)).toContain('小陳')
+
+    // 沒有共同紀錄的兩個名字可以合併
+    await page.getByLabel('新增牌咖').fill('新來的')
+    await page.getByRole('button', { name: '新增', exact: true }).click()
+    await expect(page.getByRole('tab', { name: '牌咖（6）' })).toBeVisible()
+    await page.getByRole('button', { name: '幫 新來的 改名' }).click()
+    await dialog.getByLabel('新名字').fill('老王')
+    await dialog.getByRole('button', { name: '合併' }).click()
+    await expect(page.getByRole('tab', { name: '牌咖（5）' })).toBeVisible()
+    expect(fake.players.map((p) => p.name)).not.toContain('新來的')
+  })
+
+  test('場地必填：沒選場地不能存', async ({ page, fake }) => {
+    await fillRow(page, 0, { name: 'A', score: '100', rounds: '1' })
+    await fillRow(page, 1, { name: 'B', score: '-100', rounds: '1' })
+    await fillRow(page, 2, { name: 'C', score: '0', rounds: '1' })
+    await fillRow(page, 3, { name: 'D', score: '0', rounds: '1' })
+    await expect(page.getByTestId('total')).toContainText('平衡')
+    await page.getByRole('button', { name: '存檔' }).click()
+    await expect(page.getByRole('alert')).toContainText('請選擇場地')
+    expect(fake.rpcCalls).not.toContain('save_record')
+
+    await page.locator('#record-venue').fill('樹窩')
+    await page.getByRole('button', { name: '存檔' }).click()
+    await expect(page.getByRole('heading', { name: '紀錄明細' })).toBeVisible()
+  })
+
+  test('記錄時輸入新場地會自動加入名單；清除場地後不能存', async ({ page, fake }) => {
     await page.locator('#record-venue').fill('公司')
     await expect(page.getByText('新場地，存檔後會加入場地名單')).toBeVisible()
     await createAndOpen(page)
@@ -359,8 +435,9 @@ test.describe('紀錄', () => {
     await expect(page.locator('#record-venue')).toHaveValue('公司')
     await page.getByRole('button', { name: '清除場地' }).click()
     await page.getByRole('button', { name: '儲存修改' }).click()
-    await expect(page.getByText('未指定場地')).toBeVisible()
-    expect(fake.records[0].venue).toBeNull()
+    await expect(page.getByRole('alert')).toContainText('請選擇場地')
+    await expect(page.getByRole('heading', { name: '編輯紀錄' })).toBeVisible()
+    expect(fake.records[0].venue).toBe('公司')
   })
 
   test('刪除場地不影響已存的紀錄', async ({ page, fake }) => {
@@ -470,6 +547,38 @@ test('總覽：戰績排行與牌咖、場地標籤', async ({ page, fake }) => 
   await expect(rows.nth(3)).toContainText('-700')
   await expect(rows.nth(3)).toContainText('勝率0%（0/2）')
 
+  // 連勝／連敗：阿華、老王兩場都輸 → 2 連敗；阿明最近一場輸、只連 1 場 → 不顯示
+  await expect(rows.nth(3).getByTestId('streak')).toHaveText('❄️ 2 連敗')
+  await expect(rows.filter({ hasText: '老王' }).getByTestId('streak')).toHaveText('❄️ 2 連敗')
+  await expect(rows.nth(0).getByTestId('streak')).toHaveCount(0)
+  await expect(rows.nth(1).getByTestId('streak')).toHaveCount(0)
+
+  // 稱號
+  const titlesOf = (i: number) => rows.nth(i).getByTestId('title')
+  // 阿明有 6 個稱號：先顯示 4 個，其他收在 +2 裡（老王只打 3 將，總將數不是大家都一樣，所以有耐力王）
+  await expect(titlesOf(0)).toHaveText([
+    '👑 牌王',
+    '🏆 冠軍收集者 ×1',
+    '🏠 地頭蛇・樹窩',
+    '💰 每將最賺',
+  ])
+  await rows.nth(0).getByRole('button', { name: '顯示其他 2 個稱號' }).click()
+  await expect(titlesOf(0)).toHaveCount(6)
+  await expect(titlesOf(0).nth(4)).toHaveText('🚀 單場爆發 +1200')
+  await expect(titlesOf(0).nth(5)).toHaveText('⏳ 耐力王')
+  // 小美只有 1 個，不需要收合
+  await expect(rows.nth(1).getByRole('button', { name: /稱號/ })).toHaveCount(0)
+  await expect(titlesOf(1)).toContainText(['🏆 冠軍收集者 ×1'])
+  await expect(rows.filter({ hasText: '老王' }).getByTestId('title')).toContainText([
+    '💣 單場重傷 -500',
+  ])
+  await expect(titlesOf(3)).toContainText(['💸 慈善家'])
+  // 大家場數一樣，不頒全勤獎
+  await expect(page.getByTestId('title').filter({ hasText: '全勤獎' })).toHaveCount(0)
+
+  await page.getByText('稱號說明').click()
+  await expect(page.getByText('超過 30 天沒上桌')).toBeVisible()
+
   const players = page.getByLabel('牌咖標籤')
   await expect(players.getByRole('listitem')).toHaveCount(5)
   await expect(players.getByRole('listitem').filter({ hasText: '阿明' })).toContainText('2 場')
@@ -478,4 +587,194 @@ test('總覽：戰績排行與牌咖、場地標籤', async ({ page, fake }) => 
   await expect(venues.getByRole('listitem').filter({ hasText: '樹窩' })).toContainText('2 場')
   await expect(venues.getByRole('listitem').filter({ hasText: '公司' })).toContainText('0 場')
   void fake
+})
+
+test('稱號超過 4 個時收成 +N，可以展開與收合', async ({ page, fake }) => {
+  const mk = (id: string, date: string, venue: string | null, ps: Record<string, number>) => ({
+    id,
+    date,
+    venue,
+    house_fee: null,
+    house_fee_in_total: false,
+    created_at: date,
+    updated_at: date,
+    deleted_at: null,
+    record_players: Object.entries(ps).map(([name, score], i) => ({
+      id: `${id}${i}`,
+      position: i + 1,
+      name,
+      score,
+      rounds: 1,
+    })),
+  })
+  // 大樹幾乎每場都贏，會拿到 9 個稱號
+  fake.records = [
+    mk('a', '2026-08-01', null, { 大樹: 100, 小美: -100, 阿明: 0, 老王: 0 }),
+    mk('b', '2026-09-01', '樹窩', { 大樹: 500, 小美: -200, 老王: -200, 阿華: -100 }),
+    mk('c', '2026-09-02', '樹窩', { 大樹: 300, 小美: -100, 老王: -100, 阿華: -100 }),
+    mk('d', '2026-09-03', null, { 大樹: -100, 小美: 300, 老王: -100, 阿華: -100 }),
+    mk('e', '2026-09-04', null, { 大樹: 400, 小美: -100, 老王: -200, 阿華: -100 }),
+    mk('f', '2026-09-05', null, { 大樹: 200, 小美: 0, 老王: -100, 阿華: -100 }),
+    mk('g', '2026-09-06', null, { 大樹: 100, 小美: -100, 老王: 0, 阿華: 100, 小陳: -100 }),
+  ]
+  await page.goto('/')
+  const top = page.getByTestId('standing').first()
+  await expect(top).toContainText('大樹')
+  await expect(top.getByTestId('title')).toHaveCount(4)
+  await expect(top.getByTestId('title').first()).toHaveText('👑 牌王')
+
+  const more = top.getByRole('button', { name: '顯示其他 5 個稱號' })
+  await expect(more).toHaveText('+5')
+  await more.click()
+  await expect(top.getByTestId('title')).toHaveCount(9)
+  await expect(top.getByTestId('title').last()).toHaveText('🎢 雲霄飛車')
+
+  await top.getByRole('button', { name: '收合稱號' }).click()
+  await expect(top.getByTestId('title')).toHaveCount(4)
+})
+
+/** 直接在假的資料庫放 7 筆紀錄：大樹幾乎都贏 */
+function seedSeason(fake: FakeSupabase) {
+  const mk = (id: string, date: string, venue: string | null, ps: Record<string, number>) => ({
+    id,
+    date,
+    venue,
+    house_fee: null,
+    house_fee_in_total: false,
+    created_at: date,
+    updated_at: date,
+    deleted_at: null,
+    record_players: Object.entries(ps).map(([name, score], i) => ({
+      id: `${id}${i}`,
+      position: i + 1,
+      name,
+      score,
+      rounds: 1,
+    })),
+  })
+  fake.records = [
+    mk('a', '2026-08-01', null, { 大樹: 100, 小美: -100, 阿明: 0, 老王: 0 }),
+    mk('b', '2026-09-01', '樹窩', { 大樹: 500, 小美: -200, 老王: -200, 阿華: -100 }),
+    mk('c', '2026-09-02', '樹窩', { 大樹: 300, 小美: -100, 老王: -100, 阿華: -100 }),
+    mk('d', '2026-09-03', '公司', { 大樹: -100, 小美: 300, 老王: -100, 阿華: -100 }),
+    mk('e', '2026-09-04', null, { 大樹: 400, 小美: -100, 老王: -200, 阿華: -100 }),
+    mk('f', '2026-09-05', null, { 大樹: 200, 小美: 0, 老王: -100, 阿華: -100 }),
+    mk('g', '2026-09-06', null, { 大樹: 100, 小美: -100, 老王: 0, 阿華: 100, 小陳: -100 }),
+  ]
+  fake.players = ['大樹', '小美', '老王', '阿華', '小陳', '阿明'].map((name) => ({
+    name,
+    last_used: '2026-09-06',
+    created_at: '2026-08-01',
+  }))
+  fake.players.push({ name: '新來的', last_used: null, created_at: '2026-09-10' })
+}
+
+test('戰績排行顯示剋星與提款機', async ({ page, fake }) => {
+  seedSeason(fake)
+  await page.goto('/')
+  // 用名字按鈕找列，避免「剋星：大樹」這種標籤文字也被比對到
+  const row = (name: string) =>
+    page
+      .getByTestId('standing')
+      .filter({ has: page.getByRole('button', { name: `查看 ${name} 的個人數據` }) })
+  // 大樹對老王 6 勝 0 負 1 平，淨勝最多
+  await expect(row('大樹').getByTestId('atm')).toHaveText('🏧 提款機：老王')
+  await expect(row('大樹').getByTestId('nemesis')).toHaveCount(0)
+  // 小美對大樹 1 勝 6 負
+  await expect(row('小美').getByTestId('nemesis')).toHaveText('😈 剋星：大樹')
+  // 小陳只打 1 場，同桌不到 3 場
+  await expect(row('小陳').getByTestId('nemesis')).toHaveCount(0)
+  await expect(row('小陳').getByTestId('atm')).toHaveCount(0)
+})
+
+test('個人頁：數據、名次分布、最近場次、對戰、場地、每月', async ({ page, fake }) => {
+  seedSeason(fake)
+  await page.goto('/')
+  await page.getByRole('button', { name: '查看 大樹 的個人數據' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: '大樹' })).toBeVisible()
+  await expect(nav(page).getByRole('button', { name: '總覽' })).toHaveAttribute('aria-current', 'page')
+
+  // A. 頁首：稱號全部展開，不收合
+  const header = page.getByRole('region', { name: '個人總覽' })
+  await expect(header).toContainText('+1500')
+  await expect(header).toContainText('第 1 名')
+  await expect(header.getByTestId('streak')).toHaveText('🔥 3 連勝')
+  await expect(header.getByTestId('title')).toHaveCount(9)
+  await expect(header.getByRole('button', { name: /稱號/ })).toHaveCount(0)
+  await expect(header.getByTestId('atm')).toHaveText('🏧 提款機：老王')
+
+  // B. 數據格
+  const stats = page.getByLabel('個人數據')
+  await expect(stats).toContainText('場數7')
+  await expect(stats).toContainText('冠軍6 次')
+  await expect(stats).toContainText('單場最高+500')
+  await expect(stats).toContainText('單場最低-100')
+  await expect(stats).toContainText('平均名次1.1')
+
+  // C. 名次分布
+  const ranks = page.getByLabel('名次分布')
+  await expect(ranks.getByRole('listitem').nth(0)).toContainText('6 次')
+  await expect(ranks.getByRole('listitem').nth(1)).toContainText('1 次')
+
+  // D. 走勢圖
+  await expect(page.getByRole('img', { name: /共 7 場，目前 \+1500/ })).toBeVisible()
+
+  // F. 對戰分析
+  const h2h = (name: string) => page.getByTestId('h2h').filter({ hasText: name })
+  await expect(h2h('小美')).toContainText('6 勝 1 負')
+  await expect(h2h('老王')).toContainText('6 勝 0 負 1 平')
+  await expect(h2h('老王')).toContainText('🏧')
+
+  // G. 場地：樹窩 2 場 +800 是主場；公司只有 1 場，不算客場魔咒
+  await expect(page.getByTestId('home')).toHaveText('🏠 主場：樹窩')
+  await expect(page.getByTestId('away')).toHaveCount(0)
+  await expect(page.getByTestId('venue-stat').filter({ hasText: '樹窩' })).toContainText('+800')
+
+  // H. 每月
+  const months = page.getByLabel('每月表現')
+  await expect(months.getByRole('listitem').nth(0)).toContainText('2026/08')
+  await expect(months.getByRole('listitem').nth(0)).toContainText('+100')
+  await expect(months.getByRole('listitem').nth(1)).toContainText('+1400')
+  await expect(months.getByRole('listitem').nth(1)).toContainText('6 場')
+})
+
+test('個人頁：點最近場次、點對手，返回鍵回到上一頁', async ({ page, fake }) => {
+  seedSeason(fake)
+  await page.goto('/')
+  await page.getByRole('button', { name: '查看 大樹 的個人數據' }).click()
+
+  // E. 最近場次，新到舊
+  const recent = page.getByLabel('最近場次').getByRole('button')
+  await expect(recent).toHaveCount(7)
+  await expect(recent.first()).toContainText('2026/09/06')
+  await recent.first().click()
+  await expect(page.getByRole('heading', { name: '紀錄明細' })).toBeVisible()
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: '大樹' })).toBeVisible()
+
+  // 點對手進對手的個人頁，再返回
+  await page.getByTestId('h2h').filter({ hasText: '小美' }).getByRole('button').click()
+  await expect(page.getByRole('heading', { level: 1, name: '小美' })).toBeVisible()
+  await expect(page.getByRole('region', { name: '個人總覽' }).getByTestId('nemesis')).toHaveText(
+    '😈 剋星：大樹',
+  )
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: '大樹' })).toBeVisible()
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.getByRole('heading', { name: '總覽' })).toBeVisible()
+})
+
+test('從名單和總覽標籤都能進個人頁；沒上過桌的不能點', async ({ page, fake }) => {
+  seedSeason(fake)
+  await page.goto('/')
+  await page.getByLabel('牌咖標籤').getByRole('button', { name: /老王/ }).click()
+  await expect(page.getByRole('heading', { level: 1, name: '老王' })).toBeVisible()
+
+  await nav(page).getByRole('button', { name: '名單' }).click()
+  await expect(page.getByRole('button', { name: '查看 新來的 的個人數據' })).toHaveCount(0)
+  await page.getByRole('button', { name: '查看 阿華 的個人數據' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: '阿華' })).toBeVisible()
+  await expect(nav(page).getByRole('button', { name: '名單' })).toHaveAttribute('aria-current', 'page')
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.getByRole('heading', { name: '牌咖與場地' })).toBeVisible()
 })
