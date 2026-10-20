@@ -4,6 +4,7 @@ import { formatDate, formatDateTime } from '../lib/format'
 import { rankPlayers } from '../lib/ranking'
 import { RankedList } from '../components/RankedList'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ShareButtons } from '../components/ShareButtons'
 
 type DetailPageProps = {
   record: GameRecord
@@ -54,6 +55,8 @@ export function DetailPage({ record, canEdit, busy, onEdit, onDelete }: DetailPa
           </dd>
         </div>
       </dl>
+
+      <ShareButtons record={record} />
 
       <p className="space-y-0.5 px-1 text-xs text-slate-600">
         <span className="block">建立：{formatDateTime(record.createdAt)}</span>
