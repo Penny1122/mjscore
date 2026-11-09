@@ -141,7 +141,6 @@ export function RecordForm({
       .filter((k) => !usedElsewhere.has(k.name))
       .filter((k) => k.name !== row.name.trim())
       .filter((k) => !query || k.name.toLowerCase().includes(query))
-      .slice(0, 12)
   }
 
   const pickName = (row: PlayerDraft, name: string) => {
@@ -283,7 +282,7 @@ export function RecordForm({
                 </div>
 
                 {suggestions.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2" aria-label="牌咖名單">
+                  <div className="mt-2 flex flex-wrap gap-1.5" aria-label="牌咖名單">
                     {suggestions.map((k) => (
                       <button
                         key={k.name}
@@ -291,7 +290,7 @@ export function RecordForm({
                         // 防止按下時名字欄位先失焦把清單收起來
                         onPointerDown={(e) => e.preventDefault()}
                         onClick={() => pickName(row, k.name)}
-                        className="h-9 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-3.5 text-sm text-cyan-100 active:bg-cyan-500/25"
+                        className="h-8 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2.5 text-xs text-cyan-100 active:bg-cyan-500/25"
                       >
                         {k.name}
                       </button>
