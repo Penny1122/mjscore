@@ -267,6 +267,49 @@ test.describe('紀錄', () => {
     await expect(chips).toHaveCount(2)
   })
 
+  test('牌咖名單用手指點也能帶入', async ({ page }) => {
+    await createAndOpen(page)
+    await nav(page).getByRole('button', { name: '新增紀錄' }).click()
+
+    await page.getByLabel('第 1 位玩家名字').tap()
+    const chips = page.getByLabel('牌咖名單', { exact: true }).getByRole('button')
+    await chips.filter({ hasText: '小美' }).tap()
+    await expect(page.getByLabel('第 1 位玩家名字')).toHaveValue('小美')
+  })
+
+  test('名字欄位先失焦（iPhone Safari 點按鈕時會這樣）仍可點牌咖帶入', async ({ page }) => {
+    await createAndOpen(page)
+    await nav(page).getByRole('button', { name: '新增紀錄' }).click()
+
+    const name = page.getByLabel('第 1 位玩家名字')
+    await name.tap()
+    await name.evaluate((el) => (el as HTMLInputElement).blur())
+    const chips = page.getByLabel('牌咖名單', { exact: true }).getByRole('button')
+    await chips.filter({ hasText: '小美' }).tap()
+    await expect(name).toHaveValue('小美')
+    await expect(page.getByLabel('第 1 位玩家金額')).toBeFocused()
+    await expect(chips).toHaveCount(0)
+
+    // 點名字區以外的地方會收起名單
+    await page.getByLabel('第 2 位玩家名字').tap()
+    await expect(chips).not.toHaveCount(0)
+    await page.getByRole('heading', { name: /玩家（/ }).tap()
+    await expect(chips).toHaveCount(0)
+  })
+
+  test('注音選字中點牌咖，名字不會被選字結果蓋掉', async ({ page }) => {
+    await createAndOpen(page)
+    await nav(page).getByRole('button', { name: '新增紀錄' }).click()
+
+    await page.getByLabel('第 2 位玩家名字').tap()
+    // 模擬輸入法還在組字（字下面有底線、還沒按確定）
+    const cdp = await page.context().newCDPSession(page)
+    await cdp.send('Input.imeSetComposition', { text: '小', selectionStart: 1, selectionEnd: 1 })
+    const chips = page.getByLabel('牌咖名單', { exact: true }).getByRole('button')
+    await chips.filter({ hasText: '小美' }).tap()
+    await expect(page.getByLabel('第 2 位玩家名字')).toHaveValue('小美')
+  })
+
   test('刪除牌咖', async ({ page, fake }) => {
     await createAndOpen(page)
     await nav(page).getByRole('button', { name: '名單' }).click()

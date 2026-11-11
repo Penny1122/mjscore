@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { GameRecord, GameRecordInput, KnownPlayer, Venue } from '../types'
 import { createId } from '../lib/id'
 import { amountColorClass, formatAmount, todayString } from '../lib/format'
@@ -93,6 +93,18 @@ export function RecordForm({
 
   const validation = useMemo(() => validateDraft(draft), [draft])
 
+  // 牌咖名單不靠名字欄位的 blur 收起：iPhone Safari 點按鈕時欄位會先失焦，
+  // 清單一收起來，接著的 click 就落空、名字帶不進去。改成點到名字區以外才收起。
+  useEffect(() => {
+    if (!focusedNameId) return
+    const onPointerDown = (e: PointerEvent) => {
+      const picker = (e.target as Element | null)?.closest?.('[data-name-picker]')
+      if (picker?.getAttribute('data-name-picker') !== focusedNameId) setFocusedNameId(null)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [focusedNameId])
+
   const preview = useMemo(
     () =>
       rankPlayers(
@@ -164,7 +176,15 @@ export function RecordForm({
   const canSave = validation.input !== undefined
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-5">
+    <form
+      onSubmit={handleSubmit}
+      noValidate
+      // 焦點移到名字以外的欄位（例如鍵盤按「下一個」）就收起牌咖名單
+      onFocus={(e) => {
+        if (!(e.target as Element).closest('[data-name-picker]')) setFocusedNameId(null)
+      }}
+      className="space-y-5"
+    >
       <div>
         <label htmlFor="record-date" className="mb-1.5 block text-sm text-slate-400">
           日期
@@ -263,9 +283,9 @@ export function RecordForm({
                       value={row.name}
                       autoComplete="off"
                       enterKeyHint="next"
+                      data-name-picker={row.id}
                       onChange={(e) => updatePlayer(row.id, { name: e.target.value })}
                       onFocus={() => setFocusedNameId(row.id)}
-                      onBlur={() => setFocusedNameId((id) => (id === row.id ? null : id))}
                       className={inputClass(Boolean(nameError))}
                     />
                     <FieldError message={nameError} />
@@ -282,13 +302,18 @@ export function RecordForm({
                 </div>
 
                 {suggestions.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5" aria-label="牌咖名單">
+                  <div
+                    className="mt-2 flex flex-wrap gap-1.5"
+                    aria-label="牌咖名單"
+                    data-name-picker={row.id}
+                  >
                     {suggestions.map((k) => (
                       <button
                         key={k.name}
                         type="button"
-                        // 防止按下時名字欄位先失焦把清單收起來
+                        // 盡量不讓名字欄位失焦（鍵盤不會先收起來、畫面不跳動）
                         onPointerDown={(e) => e.preventDefault()}
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => pickName(row, k.name)}
                         className="h-8 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2.5 text-xs text-cyan-100 active:bg-cyan-500/25"
                       >
